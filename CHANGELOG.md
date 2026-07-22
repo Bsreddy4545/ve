@@ -5,6 +5,14 @@ All notable changes to the Ve app are documented here.
 ## 2026-07-22
 
 ### Added
+- **Task emails** — creating a task emails the registered address (via nodemailer;
+  configure `GMAIL_USER` + `GMAIL_APP_PASSWORD` in `.env`). Skips gracefully and
+  never blocks task creation when email is not configured.
+- **Home / Overview** section (now the default landing) — greeting, live counts
+  (open tasks, files, connected tools, unread alerts), email status, and quick actions.
+- `/api/summary` endpoint for the overview counts.
+
+### Added (dashboard)
 - **Dashboard** shown after sign-in, with a collapsible sidebar and six sections:
   Tasks, Files, Gmail, Meetings, Notifications, Connectors.
 - **Tasks** — add / complete / delete, with priority and due date, stored in Postgres.

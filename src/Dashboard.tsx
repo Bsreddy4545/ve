@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, type Connector, type Notification, type User } from './api'
+import Overview from './sections/Overview'
 import Tasks from './sections/Tasks'
 import Files from './sections/Files'
 import Gmail from './sections/Gmail'
@@ -8,9 +9,10 @@ import Notifications from './sections/Notifications'
 import Connectors from './sections/Connectors'
 import './Dashboard.css'
 
-type SectionId = 'tasks' | 'files' | 'gmail' | 'meetings' | 'notifications' | 'connectors'
+type SectionId = 'home' | 'tasks' | 'files' | 'gmail' | 'meetings' | 'notifications' | 'connectors'
 
 const NAV: { id: SectionId; label: string; icon: string }[] = [
+  { id: 'home', label: 'Home', icon: '🏠' },
   { id: 'tasks', label: 'Tasks', icon: '🗂️' },
   { id: 'files', label: 'Files', icon: '📁' },
   { id: 'gmail', label: 'Gmail', icon: '✉️' },
@@ -20,7 +22,7 @@ const NAV: { id: SectionId; label: string; icon: string }[] = [
 ]
 
 export default function Dashboard({ user, onSignOut }: { user: User; onSignOut: () => void }) {
-  const [section, setSection] = useState<SectionId>('tasks')
+  const [section, setSection] = useState<SectionId>('home')
   const [connectors, setConnectors] = useState<Connector[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unread, setUnread] = useState(0)
@@ -45,6 +47,8 @@ export default function Dashboard({ user, onSignOut }: { user: User; onSignOut: 
 
   const render = () => {
     switch (section) {
+      case 'home':
+        return <Overview user={user} onGo={setSection} />
       case 'tasks':
         return <Tasks />
       case 'files':

@@ -10,6 +10,7 @@ import bcrypt from 'bcryptjs'
 import pg from 'pg'
 import multer from 'multer'
 import { OAuth2Client } from 'google-auth-library'
+import { sendTaskEmail, mailEnabled } from './mailer.js'
 
 const { DATABASE_URL, GOOGLE_CLIENT_ID, JWT_SECRET, PORT = 3001 } = process.env
 
@@ -198,6 +199,19 @@ app.get('/api/me', requireAuth, async (req, res) => {
   res.json({ user: rows[0] })
 })
 
+app.get('/api/summary', requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND NOT done) AS open_tasks,
+       (SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND done) AS done_tasks,
+       (SELECT COUNT(*) FROM files WHERE user_id = $1) AS files,
+       (SELECT COUNT(*) FROM connectors WHERE user_id = $1 AND connected) AS connected,
+       (SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND NOT read) AS unread`,
+    [req.userId],
+  )
+  res.json({ summary: rows[0], mailEnabled })
+})
+
 app.post('/api/auth/logout', (_req, res) => {
   res.clearCookie('session')
   res.json({ ok: true })
@@ -220,7 +234,18 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
     'INSERT INTO tasks (user_id, title, priority, due_date) VALUES ($1, $2, $3, $4) RETURNING id, title, done, priority, due_date, created_at',
     [req.userId, title.trim(), priority, due_date || null],
   )
-  res.json({ task: rows[0] })
+  const task = rows[0]
+  res.json({ task, emailed: mailEnabled })
+
+  // Fire-and-forget: email the registered address + drop an in-app notification.
+  const { rows: userRows } = await pool.query('SELECT email, name FROM users WHERE id = $1', [req.userId])
+  const user = userRows[0]
+  if (user) {
+    notify(req.userId, 'system', 'Task created', `“${task.title}” was added to your tasks.`).catch(() => {})
+    sendTaskEmail(user.email, user.name, task)
+      .then((r) => !r?.skipped && console.log(`[mail] task email sent to ${user.email}`))
+      .catch((err) => console.error('[mail] send failed:', err.message))
+  }
 })
 
 app.patch('/api/tasks/:id', requireAuth, async (req, res) => {

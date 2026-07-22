@@ -53,8 +53,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+export type Summary = {
+  open_tasks: string
+  done_tasks: string
+  files: string
+  connected: string
+  unread: string
+}
+
 export const api = {
   me: () => request<{ user: User }>('/api/me'),
+  summary: () => request<{ summary: Summary; mailEnabled: boolean }>('/api/summary'),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
 
   tasks: () => request<{ tasks: Task[] }>('/api/tasks'),
