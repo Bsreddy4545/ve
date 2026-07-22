@@ -5,6 +5,10 @@ All notable changes to the Ve app are documented here.
 ## 2026-07-22
 
 ### Added
+- **Cloud deploy setup** — Express now serves the built React app in production
+  (single origin, secure cookies, `trust proxy`), so the whole stack runs as one
+  service. Added `render.yaml` (Render blueprint) and `DEPLOY.md` with step-by-step
+  Neon (Postgres) + Render + Google OAuth instructions. New `start` script.
 - **Slack (live integration)** — connect with a Slack app bot token; Ve verifies it
   via `auth.test`, then polls channels the bot is in every 60s and turns new messages
   into real notifications. "Sync now" button for on-demand refresh. Connectors UI shows

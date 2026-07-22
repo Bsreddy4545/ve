@@ -1,0 +1,29 @@
+# Render blueprint — deploys the Ve full-stack app (Express serves the API + the
+# built React frontend) as one free web service.
+# Database lives on Neon (free Postgres); set DATABASE_URL in the Render dashboard.
+services:
+  - type: web
+    name: ve
+    runtime: node
+    plan: free
+    # --include=dev forces build tools (vite, typescript) to install even though
+    # NODE_ENV=production, which npm would otherwise skip.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true # Render generates a strong random secret
+      - key: DATABASE_URL
+        sync: false # paste your Neon connection string in the dashboard
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false # same value as GOOGLE_CLIENT_ID; baked into the frontend at build
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false

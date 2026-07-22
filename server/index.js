@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, extname } from 'node:path'
-import { mkdirSync, createReadStream } from 'node:fs'
+import { mkdirSync, createReadStream, existsSync } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import express from 'express'
 import cookieParser from 'cookie-parser'
@@ -32,8 +32,10 @@ const pool = new pg.Pool({
   ssl: /localhost|127\.0\.0\.1/.test(DATABASE_URL) ? false : { rejectUnauthorized: false },
 })
 
+const isProd = process.env.NODE_ENV === 'production'
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID)
 const app = express()
+if (isProd) app.set('trust proxy', 1) // behind the host's TLS proxy (Render, etc.)
 app.use(express.json())
 app.use(cookieParser())
 
@@ -112,7 +114,12 @@ const PUBLIC_FIELDS = 'id, email, name, picture'
 
 function setSession(res, user) {
   const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' })
-  res.cookie('session', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 })
+  res.cookie('session', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd, // https-only in production
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  })
 }
 
 // Auth middleware — attaches req.userId or 401s.
@@ -473,4 +480,20 @@ app.post('/api/notifications/read', requireAuth, async (req, res) => {
   res.json({ ok: true })
 })
 
-app.listen(PORT, () => console.log(`Ve API listening on http://localhost:${PORT}`))
+/* --------------------- serve the built frontend (prod) -------------------- */
+
+// In production the Express app also serves the compiled React app from dist/,
+// so the whole thing runs on one origin (no CORS, cookies just work).
+const DIST = join(__dirname, '..', 'dist')
+if (existsSync(DIST)) {
+  app.use(express.static(DIST))
+  // SPA fallback: any non-API GET returns index.html.
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(join(DIST, 'index.html'))
+    }
+    next()
+  })
+}
+
+app.listen(PORT, () => console.log(`Ve running on http://localhost:${PORT}`))
