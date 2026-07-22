@@ -100,6 +100,10 @@ async function migrate() {
       read BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    -- Live-connector fields: OAuth/app token + per-channel sync cursors.
+    ALTER TABLE connectors ADD COLUMN IF NOT EXISTS access_token TEXT;
+    ALTER TABLE connectors ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE connectors ADD COLUMN IF NOT EXISTS account_label TEXT;
   `)
 }
 await migrate()
@@ -320,33 +324,138 @@ app.delete('/api/files/:id', requireAuth, async (req, res) => {
 
 /* ------------------------------- connectors ------------------------------- */
 
+// Providers with a real, working integration (vs. UI-only toggles for now).
+const LIVE_PROVIDERS = new Set(['slack'])
+
 app.get('/api/connectors', requireAuth, async (req, res) => {
-  const { rows } = await pool.query('SELECT provider, connected, connected_at FROM connectors WHERE user_id = $1', [req.userId])
+  const { rows } = await pool.query('SELECT provider, connected, connected_at, account_label FROM connectors WHERE user_id = $1', [req.userId])
   const status = Object.fromEntries(rows.map((r) => [r.provider, r]))
   res.json({
     connectors: PROVIDERS.map((p) => ({
       ...p,
+      live: LIVE_PROVIDERS.has(p.id),
       connected: status[p.id]?.connected ?? false,
       connected_at: status[p.id]?.connected_at ?? null,
+      account_label: status[p.id]?.account_label ?? null,
     })),
   })
 })
 
+/* ------------------------------ slack (live) ------------------------------ */
+
+async function slackApi(token, method, params = {}) {
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  })
+  return res.json()
+}
+
+// Poll channels the token can see and turn new messages into notifications.
+async function syncSlack(userId) {
+  const { rows } = await pool.query(
+    `SELECT access_token, state FROM connectors WHERE user_id = $1 AND provider = 'slack' AND connected`,
+    [userId],
+  )
+  const conn = rows[0]
+  if (!conn?.access_token) return 0
+  const token = conn.access_token
+  const state = conn.state || {}
+
+  const list = await slackApi(token, 'conversations.list', {
+    types: 'public_channel,private_channel',
+    exclude_archived: 'true',
+    limit: '200',
+  })
+  if (!list.ok) return 0
+  const channels = (list.channels || []).filter((c) => c.is_member)
+
+  let created = 0
+  for (const ch of channels) {
+    const cursor = state[ch.id]
+    const hist = await slackApi(token, 'conversations.history', {
+      channel: ch.id,
+      limit: '10',
+      ...(cursor ? { oldest: cursor } : {}),
+    })
+    if (!hist.ok || !hist.messages?.length) continue
+    const newest = hist.messages[0].ts
+    // First time we see a channel: record the cursor, don't backfill old messages.
+    if (cursor) {
+      const fresh = hist.messages.filter((m) => m.type === 'message' && !m.subtype && Number(m.ts) > Number(cursor))
+      for (const m of fresh.reverse()) {
+        await notify(userId, 'slack', `New message in #${ch.name}`, (m.text || '').slice(0, 160))
+        created++
+      }
+    }
+    state[ch.id] = newest
+  }
+  await pool.query(`UPDATE connectors SET state = $2 WHERE user_id = $1 AND provider = 'slack'`, [userId, state])
+  return created
+}
+
+app.post('/api/connectors/slack/token', requireAuth, async (req, res) => {
+  const token = String(req.body.token || '').trim()
+  if (!token) return res.status(400).json({ error: 'Paste your Slack token' })
+  const auth = await slackApi(token, 'auth.test')
+  if (!auth.ok) return res.status(400).json({ error: `Slack rejected the token: ${auth.error || 'invalid'}` })
+  const label = `${auth.team} · ${auth.user}`
+  await pool.query(
+    `INSERT INTO connectors (user_id, provider, connected, connected_at, access_token, account_label, state)
+     VALUES ($1, 'slack', true, now(), $2, $3, '{}'::jsonb)
+     ON CONFLICT (user_id, provider) DO UPDATE
+       SET connected = true, connected_at = now(), access_token = $2, account_label = $3`,
+    [req.userId, token, label],
+  )
+  await notify(req.userId, 'slack', 'Slack connected', `Workspace: ${label}`)
+  syncSlack(req.userId).catch((e) => console.error('[slack] initial sync failed:', e.message))
+  res.json({ ok: true, account_label: label })
+})
+
+app.post('/api/connectors/slack/sync', requireAuth, async (req, res) => {
+  try {
+    const created = await syncSlack(req.userId)
+    res.json({ ok: true, created })
+  } catch (err) {
+    console.error('[slack] sync failed:', err.message)
+    res.status(500).json({ error: 'Slack sync failed' })
+  }
+})
+
+// Generic connect/disconnect toggle for UI-only providers. Registered after the
+// specific slack routes so /slack/token and /slack/sync match their own handlers.
 app.post('/api/connectors/:provider/:action', requireAuth, async (req, res) => {
   const { provider, action } = req.params
   if (!PROVIDERS.some((p) => p.id === provider)) return res.status(404).json({ error: 'Unknown provider' })
   if (action !== 'connect' && action !== 'disconnect') return res.status(400).json({ error: 'Invalid action' })
+  if (action === 'connect' && LIVE_PROVIDERS.has(provider)) {
+    return res.status(400).json({ error: `${provider} connects with a token — use its Connect form` })
+  }
   const connected = action === 'connect'
   await pool.query(
-    `INSERT INTO connectors (user_id, provider, connected, connected_at)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (user_id, provider) DO UPDATE SET connected = $3, connected_at = $4`,
+    `INSERT INTO connectors (user_id, provider, connected, connected_at, access_token, account_label)
+     VALUES ($1, $2, $3, $4, NULL, NULL)
+     ON CONFLICT (user_id, provider) DO UPDATE
+       SET connected = $3, connected_at = $4,
+           access_token = CASE WHEN $3 THEN connectors.access_token ELSE NULL END,
+           account_label = CASE WHEN $3 THEN connectors.account_label ELSE NULL END`,
     [req.userId, provider, connected, connected ? new Date() : null],
   )
   const name = PROVIDERS.find((p) => p.id === provider).name
   if (connected) await notify(req.userId, provider, `${name} connected`, `You'll start seeing ${name} notifications here.`)
   res.json({ ok: true, provider, connected })
 })
+
+// Background poll for every connected Slack user.
+setInterval(async () => {
+  try {
+    const { rows } = await pool.query(`SELECT user_id FROM connectors WHERE provider = 'slack' AND connected`)
+    for (const r of rows) await syncSlack(r.user_id).catch(() => {})
+  } catch (err) {
+    console.error('[slack] poll loop error:', err.message)
+  }
+}, 60_000)
 
 /* ------------------------------ notifications ----------------------------- */
 

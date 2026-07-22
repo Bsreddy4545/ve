@@ -388,7 +388,7 @@ input:focus, select:focus {
 }
 .connector-card {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   border: 1px solid var(--border);
@@ -397,6 +397,32 @@ input:focus, select:focus {
   transition: border-color 0.15s;
 }
 .connector-card.on { border-color: var(--accent-border); background: var(--accent-bg); }
+.connector-row { display: flex; align-items: center; gap: 12px; }
+
+.live-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #1a9c50;
+  background: rgba(26, 156, 80, 0.12);
+  padding: 1px 6px;
+  border-radius: 5px;
+  vertical-align: middle;
+}
+.connector-actions { display: flex; align-items: center; gap: 10px; }
+.sync-msg { font-size: 12px; color: var(--text); }
+
+.token-form { display: flex; flex-direction: column; gap: 8px; }
+.token-help { font-size: 12px; color: var(--text); line-height: 1.5; margin: 0; }
+.token-help code {
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--code-bg);
+  border-radius: 4px;
+}
+.token-input { display: flex; gap: 8px; }
+.token-input input { flex: 1; font-size: 13px; }
+.error.small { font-size: 12px; padding: 6px 10px; margin: 0; }
 .connector-logo {
   width: 40px;
   height: 40px;

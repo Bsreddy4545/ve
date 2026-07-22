@@ -28,8 +28,10 @@ export type Connector = {
   id: string
   name: string
   kind: string
+  live: boolean
   connected: boolean
   connected_at: string | null
+  account_label: string | null
 }
 
 export type Notification = {
@@ -85,6 +87,12 @@ export const api = {
   connectors: () => request<{ connectors: Connector[] }>('/api/connectors'),
   setConnector: (provider: string, connect: boolean) =>
     request(`/api/connectors/${provider}/${connect ? 'connect' : 'disconnect'}`, { method: 'POST' }),
+  connectSlack: (token: string) =>
+    request<{ ok: boolean; account_label: string }>('/api/connectors/slack/token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+  syncSlack: () => request<{ ok: boolean; created: number }>('/api/connectors/slack/sync', { method: 'POST' }),
 
   notifications: () => request<{ notifications: Notification[]; unread: number }>('/api/notifications'),
   markNotificationsRead: () => request('/api/notifications/read', { method: 'POST' }),

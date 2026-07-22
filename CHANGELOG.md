@@ -5,6 +5,10 @@ All notable changes to the Ve app are documented here.
 ## 2026-07-22
 
 ### Added
+- **Slack (live integration)** — connect with a Slack app bot token; Ve verifies it
+  via `auth.test`, then polls channels the bot is in every 60s and turns new messages
+  into real notifications. "Sync now" button for on-demand refresh. Connectors UI shows
+  a LIVE badge and a token form for Slack; other providers remain UI toggles.
 - **Task emails** — creating a task emails the registered address (via nodemailer;
   configure `GMAIL_USER` + `GMAIL_APP_PASSWORD` in `.env`). Skips gracefully and
   never blocks task creation when email is not configured.
