@@ -27,6 +27,7 @@ jobs:
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
+          VITE_GOOGLE_CLIENT_ID: 467171630225-1ap1kl19abkp6unsd9uev80jnn6m73lp.apps.googleusercontent.com
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
