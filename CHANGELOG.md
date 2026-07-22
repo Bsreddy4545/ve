@@ -5,6 +5,19 @@ All notable changes to the Ve app are documented here.
 ## 2026-07-22
 
 ### Added
+- **Dashboard** shown after sign-in, with a collapsible sidebar and six sections:
+  Tasks, Files, Gmail, Meetings, Notifications, Connectors.
+- **Tasks** — add / complete / delete, with priority and due date, stored in Postgres.
+- **Files** — upload any file with categories (galleries, documents, links, other),
+  add link entries, download, and delete; files stored on disk + metadata in Postgres.
+- **Connectors** — connect/disconnect cards for Google, Gmail, Calendar/Meet, Outlook,
+  Slack, ClickUp, Jira, WhatsApp, Instagram, Facebook; state saved per user.
+- **Notifications** hub — unread badge in the sidebar; connecting a tool posts a
+  notification. Backend `notifications` table feeds the panel.
+- **Gmail / Meetings** sections render a designed inbox/schedule preview, gated behind
+  a "Connect" screen until the provider's OAuth is live.
+- Backend: auth middleware and REST endpoints for tasks, files (multer uploads),
+  connectors, and notifications.
 - Google sign-in ("Continue with Google") on the login page, verified server-side
   with the Google OAuth client ID and stored in the database.
 - `CHANGELOG.md` (this file).
