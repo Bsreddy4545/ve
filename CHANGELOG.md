@@ -11,6 +11,12 @@ All notable changes to the Ve app are documented here.
 - Google client ID passed to the GitHub Pages build so the button renders on the
   live site.
 
+### Docs
+- Documented required Google OAuth JavaScript origins (`http://localhost:5173`,
+  `http://localhost`, `https://bsreddy4545.github.io`) and the fix for
+  `Error 400: origin_mismatch` in the README.
+- README: environment setup, `dev:all` workflow, and how to inspect stored users.
+
 ## 2026-07-21
 
 ### Added
